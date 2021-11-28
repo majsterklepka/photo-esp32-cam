@@ -50,10 +50,13 @@
 #include "driver/sdspi_host.h"
 #include "sdmmc_cmd.h"
 
+#include "driver/gpio.h"
 
 #include "esp_camera.h"
 
 #define USE_SPI_MODE
+
+#define FLASH_GPIO	4
 
 // WROVER-KIT PIN Map
 #ifdef BOARD_WROVER_KIT
@@ -253,15 +256,19 @@ void app_main()
     int k = 0;		
     init_camera();
     init_sd_card();
+    gpio_pad_select_gpio(FLASH_GPIO);
+    gpio_set_direction(FLASH_GPIO, GPIO_MODE_OUTPUT);
 
     while(k < 10)
     {
+	    gpio_set_level(FLASH_GPIO, 1);
 
     	ESP_LOGI(TAG, "Taking picture...");
     	camera_fb_t *pic = esp_camera_fb_get();
 
     	// use pic->buf to access the image
     	ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
+	gpio_set_level(FLASH_GPIO, 0);
 
 
     	if ( save_pic(pic, k) == ESP_OK)
