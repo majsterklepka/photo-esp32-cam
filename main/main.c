@@ -54,7 +54,7 @@
 
 #include "esp_camera.h"
 
-#define USE_SPI_MODE
+//#define USE_SPI_MODE
 
 #define FLASH_GPIO	4
 
@@ -202,7 +202,7 @@ static esp_err_t init_sd_card()
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
-        .max_files = 5,
+        .max_files = 10,
         .allocation_unit_size = 16 * 1024
     };
 
@@ -228,11 +228,13 @@ static esp_err_t init_sd_card()
 static esp_err_t save_pic(camera_fb_t *pic, int k)
 {
 
+    init_sd_card();
+
     ESP_LOGI(TAG, "Opening file");
     char str[8];
     itoa(k, str, 10);
     strcat(str, ".jpg");
-    char path[25] = "/sdcard/";
+    char path[25] = "/sdcard/op";
     strcat(path, str);
     FILE* f = fopen(path, "w");
     if (f == NULL) {
@@ -255,13 +257,13 @@ void app_main()
 
     int k = 0;		
     init_camera();
-    init_sd_card();
-    gpio_pad_select_gpio(FLASH_GPIO);
-    gpio_set_direction(FLASH_GPIO, GPIO_MODE_OUTPUT);
+ ///   init_sd_card();
+	while(k < 5)
+	{
+    	gpio_pad_select_gpio(FLASH_GPIO);
+    	gpio_set_direction(FLASH_GPIO, GPIO_MODE_OUTPUT);
 
-    while(k < 10)
-    {
-	    gpio_set_level(FLASH_GPIO, 1);
+    	gpio_set_level(FLASH_GPIO, 1);
 
     	ESP_LOGI(TAG, "Taking picture...");
     	camera_fb_t *pic = esp_camera_fb_get();
@@ -272,17 +274,15 @@ void app_main()
 
 
     	if ( save_pic(pic, k) == ESP_OK)
-    	{
+  	{
 		ESP_LOGI(TAG, "Picture saved!");
 	    	k++;
-    	}
+    		esp_vfs_fat_sdmmc_unmount();
+    		ESP_LOGI(TAG, "Card unmounted");
+	}
 
-	vTaskDelay(2000 / portTICK_PERIOD_MS);
-
-    }
-
-    esp_vfs_fat_sdmmc_unmount();
-    ESP_LOGI(TAG, "Card unmounted");
+	vTaskDelay(2000/portTICK_PERIOD_MS);
+	}
 
 
 }
