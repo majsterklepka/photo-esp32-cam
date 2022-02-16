@@ -1,1 +1,0 @@
-cmd='/home/sq7eqe/.espressif/tools/cmake/3.13.4/bin/cmake;-DSDKCONFIG=/home/sq7eqe/esp32/camera-sd-card/sdkconfig;-DIDF_PATH=/home/sq7eqe/git/esp-idf;-DSECURE_BOOT_SIGNING_KEY=/home/sq7eqe/esp32/camera-sd-card;-DEXTRA_COMPONENT_DIRS=/home/sq7eqe/git/esp-idf/components/bootloader;-GNinja;<SOURCE_DIR><SOURCE_SUBDIR>'
