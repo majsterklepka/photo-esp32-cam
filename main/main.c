@@ -41,6 +41,7 @@
 
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/unistd.h>
 #include <sys/stat.h>
@@ -247,7 +248,7 @@ static esp_err_t save_pic(camera_fb_t *pic)
 
     char k = '*';
 
-    ultoa(dat, str, 10);
+    utoa(dat, str, 10);
     strcat(str, ".jpg");
 
     char path[25] = "/sdcard/op";
