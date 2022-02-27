@@ -31,6 +31,7 @@
 
 #include <esp_event_loop.h>
 #include <esp_log.h>
+#include "esp_sleep.h"
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include <sys/param.h>
@@ -118,7 +119,9 @@
 
 
 
-static const char *TAG = "example:take_picture";
+static const char *TAG = "take_picture";
+static const char *TAG1 = "SD.card";
+static const char *TAG2 = "CAMERA";
 
 static camera_config_t camera_config =
 {
@@ -146,7 +149,7 @@ static camera_config_t camera_config =
     .ledc_channel = LEDC_CHANNEL_0,
 
     .pixel_format = PIXFORMAT_JPEG, //YUV422,GRAYSCALE,RGB565,JPEG
-    .frame_size = FRAMESIZE_VGA,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
+    .frame_size = FRAMESIZE_UXGA,    //QQVGA-UXGA Do not use sizes above QVGA when not JPEG
 
     .jpeg_quality = 12, //0-63 lower number means higher quality
     .fb_count = 1       //if more than one, i2s runs in continuous mode. Use only with JPEG
@@ -158,7 +161,7 @@ static esp_err_t init_camera()
     esp_err_t err = esp_camera_init(&camera_config);
     if (err != ESP_OK)
         {
-            ESP_LOGE(TAG, "Camera Init Failed");
+            ESP_LOGE(TAG2, "Camera Init Failed");
             return err;
         }
 
@@ -167,10 +170,10 @@ static esp_err_t init_camera()
 
 static esp_err_t init_sd_card()
 {
-    ESP_LOGI(TAG, "Initializing SD card");
+    ESP_LOGI(TAG1, "Initializing SD card");
 
 #ifndef USE_SPI_MODE
-    ESP_LOGI(TAG, "Using SDMMC peripheral");
+    ESP_LOGI(TAG1, "Using SDMMC peripheral");
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
 
     // This initializes the slot without card detect (CD) and write protect (WP) signals.
@@ -189,7 +192,7 @@ static esp_err_t init_sd_card()
     gpio_set_pull_mode(13, GPIO_PULLUP_ONLY);   // D3, needed in 4- and 1-line modes
 
 #else
-    ESP_LOGI(TAG, "Using SPI peripheral");
+    ESP_LOGI(TAG1, "Using SPI peripheral");
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     sdspi_slot_config_t slot_config = SDSPI_SLOT_CONFIG_DEFAULT();
     slot_config.gpio_miso = PIN_NUM_MISO;
@@ -205,8 +208,8 @@ static esp_err_t init_sd_card()
     esp_vfs_fat_sdmmc_mount_config_t mount_config =
     {
         .format_if_mount_failed = false,
-        .max_files = 10,
-        .allocation_unit_size = 16 * 1024
+        .max_files = 3,
+        .allocation_unit_size = 16 * 512
     };
 
     esp_err_t ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
@@ -215,12 +218,12 @@ static esp_err_t init_sd_card()
         {
             if (ret == ESP_FAIL)
                 {
-                    ESP_LOGE(TAG, "Failed to mount filesystem. "
+                    ESP_LOGE(TAG1, "Failed to mount filesystem. "
                              "If you want the card to be formatted, set format_if_mount_failed = true.");
                 }
             else
                 {
-                    ESP_LOGE(TAG, "Failed to initialize the card (%s). "
+                    ESP_LOGE(TAG1, "Failed to initialize the card (%s). "
                              "Make sure SD card lines have pull-up resistors in place.", esp_err_to_name(ret));
                 }
             return ESP_FAIL;
@@ -239,35 +242,38 @@ static esp_err_t save_pic(camera_fb_t *pic)
 
     struct stat sb;
 
-    ESP_LOGI(TAG, "Opening file");
-    char str[8];
-    FILE *index = fopen("/sdcard/index.dat", "a+");
-    stat("/sdcard/index.dat", &sb);
+    ESP_LOGI(TAG1, "Opening file");
+    FILE *index = fopen("/sdcard/index.dat", "a");
+   if (index == NULL){
 
-    long long dat = sb.st_size;
+	  ESP_LOGE(TAG1, "Failed to open file index.dat for writing");
+          return ESP_FAIL;
+
+   } else {
+	   stat("/sdcard/index.dat", &sb);	   
+   }
+
+    long dat = sb.st_size + 1;
 
     char k = '*';
-
-    utoa(dat, str, 10);
-    strcat(str, ".jpg");
-
-    char path[25] = "/sdcard/op";
-    strcat(path, str);
+    char path[40];
+    sprintf(path, "/sdcard/pict%03ld.jpg", dat);
+    ESP_LOGI(TAG1, "name of file %s", path);
 
     FILE* f = fopen(path, "w");
 
     if (f == NULL)
         {
-            ESP_LOGE(TAG, "Failed to open file for writing");
+            ESP_LOGE(TAG1, "Failed to open file for writing");
             return ESP_FAIL;
         }
     fwrite(pic->buf, sizeof(uint8_t), pic->len, f);
     fclose(f);
-    ESP_LOGI(TAG, "File written");
+    ESP_LOGI(TAG1, "File written");
 
     fprintf(index, "%c", k);
     fclose(index);
-    ESP_LOGI(TAG, "index updated");
+    ESP_LOGI(TAG1, "index updated");
 
 
     return ESP_OK;
@@ -283,30 +289,34 @@ void app_main()
 
     while(k < 5)
         {
-            gpio_pad_select_gpio(FLASH_GPIO);
+            gpio_pad_select_gpio(FLASH_GPIO);// for flash led
             gpio_set_direction(FLASH_GPIO, GPIO_MODE_OUTPUT);
 
-            gpio_set_level(FLASH_GPIO, 1);
+            gpio_set_level(FLASH_GPIO, 1); //flash led
 
             ESP_LOGI(TAG, "Taking picture...");
             camera_fb_t *pic = esp_camera_fb_get();
 
             // use pic->buf to access the image
             ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
-            gpio_set_level(FLASH_GPIO, 0);
+            gpio_set_level(FLASH_GPIO, 0);// down led
 
 
             if ( save_pic(pic) == ESP_OK)
                 {
-                    ESP_LOGI(TAG, "Picture saved!");
+                    ESP_LOGI(TAG1, "Picture saved!");
                     esp_vfs_fat_sdmmc_unmount();
-                    ESP_LOGI(TAG, "Card unmounted");
+                    ESP_LOGI(TAG1, "Card unmounted");
                 }
 
-	    k++;
+	    k++; // increment numer of pictures taken at oncei
+
+	    esp_camera_fb_return(pic); //return pointer
 
             vTaskDelay(2000/portTICK_PERIOD_MS);
         }
+
+    esp_deep_sleep_start(); //support for power saving
 
 
 }
