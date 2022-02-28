@@ -34,6 +34,7 @@
 #include "esp_sleep.h"
 #include <esp_system.h>
 #include <nvs_flash.h>
+#include "nvs.h"
 #include <sys/param.h>
 #include <string.h>
 
@@ -59,6 +60,7 @@
 //#define USE_SPI_MODE
 
 #define FLASH_GPIO	4
+//#define FLASH_ON // uncomment for set flash led on
 
 // WROVER-KIT PIN Map
 #ifdef BOARD_WROVER_KIT
@@ -244,14 +246,17 @@ static esp_err_t save_pic(camera_fb_t *pic)
 
     ESP_LOGI(TAG1, "Opening file");
     FILE *index = fopen("/sdcard/index.dat", "a");
-   if (index == NULL){
+    if (index == NULL)
+        {
 
-	  ESP_LOGE(TAG1, "Failed to open file index.dat for writing");
-          return ESP_FAIL;
+            ESP_LOGE(TAG1, "Failed to open file index.dat for writing");
+            return ESP_FAIL;
 
-   } else {
-	   stat("/sdcard/index.dat", &sb);	   
-   }
+        }
+    else
+        {
+            stat("/sdcard/index.dat", &sb);
+        }
 
     long dat = sb.st_size + 1;
 
@@ -287,33 +292,40 @@ void app_main()
     init_camera();
     int k = 0;
 
+    camera_fb_t *pic;
+
+
     while(k < 5)
         {
+#ifdef FLASH_ON
             gpio_pad_select_gpio(FLASH_GPIO);// for flash led
             gpio_set_direction(FLASH_GPIO, GPIO_MODE_OUTPUT);
 
             gpio_set_level(FLASH_GPIO, 1); //flash led
-
+#endif
             ESP_LOGI(TAG, "Taking picture...");
-            camera_fb_t *pic = esp_camera_fb_get();
+            pic = esp_camera_fb_get();//get framebuffer
 
             // use pic->buf to access the image
             ESP_LOGI(TAG, "Picture taken! Its size was: %zu bytes", pic->len);
+
+#ifdef FLASH_ON
             gpio_set_level(FLASH_GPIO, 0);// down led
+#endif
 
 
             if ( save_pic(pic) == ESP_OK)
                 {
                     ESP_LOGI(TAG1, "Picture saved!");
-                    esp_vfs_fat_sdmmc_unmount();
+                    esp_vfs_fat_sdmmc_unmount();//umount sd card
                     ESP_LOGI(TAG1, "Card unmounted");
                 }
 
-	    k++; // increment numer of pictures taken at oncei
+            k++; // increment numer of pictures taken at once run
 
-	    esp_camera_fb_return(pic); //return pointer
+            esp_camera_fb_return(pic); //return pointer
 
-            vTaskDelay(2000/portTICK_PERIOD_MS);
+            vTaskDelay(500/portTICK_PERIOD_MS);
         }
 
     esp_deep_sleep_start(); //support for power saving
